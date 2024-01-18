@@ -1,7 +1,7 @@
 "use client"
 
 // REACT 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 // CHAKRA-UI
 import { Heading, Flex, Text, Input, Button, useToast, Spinner } from '@chakra-ui/react'
@@ -11,7 +11,7 @@ import { contractAddress, abi } from '@/constants'
 
 // WAGMI
 import { prepareWriteContract, writeContract, readContract, getPublicClient } from '@wagmi/core'
-import { useAccount, useContractRead, usePrepareContractWrite, useWaitForTransaction, useContractWrite } from 'wagmi'
+import { useAccount, useContractRead, usePrepareContractWrite, useWaitForTransaction, useContractWrite, useContractEvent } from 'wagmi'
 
 // VIEM (pour les events)
 import { http, parseAbiItem } from 'viem'
@@ -76,6 +76,7 @@ const Bank = () => {
     const { isLoading: isLoadingDeposit, isSuccess: isSuccessDeposit } = useWaitForTransaction({
         hash: dataDeposit?.hash,
         onSuccess(dataDeposit) {
+            hashRef.current = dataDeposit.hash;
             refetchBalanceOfUser();
             setDepositAmount('');
             toast({
@@ -131,6 +132,29 @@ const Bank = () => {
         }
     })
 
+    // Permet d'écouter si un évènement "etherDeposited" a été émis
+    /* 
+    useRef est utilisé pour conserver une référence mutable qui persiste pour la durée de vie du composant, sans déclencher de re-rendu lorsqu'elle est modifiée.
+    C'est utile pour accéder à un élément DOM directement, stocker une valeur qui ne doit pas déclencher de re-rendu lorsqu'elle change, ou conserver une valeur entre les  re-rendus sans déclencher un nouveau re-rendu.
+    */
+    const hashRef = useRef();
+    const unwatch = useContractEvent({
+        address: contractAddress,
+        abi: abi,
+        eventName: 'etherDeposited',
+        listener(log) {
+            if (log[0]?.transactionHash !== hashRef.current) return;
+            // never reached
+            toast({
+                title: 'Event emitted.',
+                description: "A deposit event has been emitted.",
+                status: 'success',
+                duration: 4000,
+                isClosable: true,
+            })
+        },
+    })
+    
     // Get all the events 
     const getEvents = async() => {
         // get all the deposit events 
