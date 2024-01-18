@@ -75,8 +75,10 @@ const Bank = () => {
 
     const { isLoading: isLoadingDeposit, isSuccess: isSuccessDeposit } = useWaitForTransaction({
         hash: dataDeposit?.hash,
-        onSuccess(dataDeposit) {
-            hashRef.current = dataDeposit.hash;
+        async onSuccess(dataDeposit) {
+            console.log('ok')
+            hashRef.current = dataDeposit?.transactionHash;
+            //await getEvents();
             refetchBalanceOfUser();
             setDepositAmount('');
             toast({
@@ -116,7 +118,8 @@ const Bank = () => {
 
     const { isLoading: isLoadingWithdraw, isSuccess: isSuccessWithdraw } = useWaitForTransaction({
         hash: dataWithdraw?.hash,
-        onSuccess(dataWithdraw) {
+        async onSuccess(dataWithdraw) {
+            await getEvents();
             refetchBalanceOfUser();
             setWithdrawAmount('');
             toast({
@@ -137,24 +140,24 @@ const Bank = () => {
     useRef est utilisé pour conserver une référence mutable qui persiste pour la durée de vie du composant, sans déclencher de re-rendu lorsqu'elle est modifiée.
     C'est utile pour accéder à un élément DOM directement, stocker une valeur qui ne doit pas déclencher de re-rendu lorsqu'elle change, ou conserver une valeur entre les  re-rendus sans déclencher un nouveau re-rendu.
     */
-    const hashRef = useRef();
+    const hashRef = useRef;
     const unwatch = useContractEvent({
         address: contractAddress,
         abi: abi,
         eventName: 'etherDeposited',
         listener(log) {
-            if (log[0]?.transactionHash !== hashRef.current) return;
-            // never reached
-            toast({
-                title: 'Event emitted.',
-                description: "A deposit event has been emitted.",
-                status: 'success',
-                duration: 4000,
-                isClosable: true,
-            })
+            if (log[0]?.transactionHash === hashRef.current) {
+                toast({
+                    title: 'Event emitted.',
+                    description: "A deposit event has been emitted.",
+                    status: 'success',
+                    duration: 4000,
+                    isClosable: true,
+                })   
+            }
         },
     })
-    
+
     // Get all the events 
     const getEvents = async() => {
         // get all the deposit events 
@@ -194,6 +197,15 @@ const Bank = () => {
             setWithdrawAmount(arg);
         }
     }
+
+    useEffect(() => {
+        const getAllEvents = async() => {
+            if(isConnected) {
+                await getEvents()
+            }
+        }
+        getAllEvents()
+    }, [address])
 
     useEffect(() => {
         if(depositWriteError) {
