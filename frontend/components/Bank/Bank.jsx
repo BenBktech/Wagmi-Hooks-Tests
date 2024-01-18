@@ -49,15 +49,16 @@ const Bank = () => {
     })
 
     const debouncedDepositAmount = useDebounce(depositAmount, 500)
+    const debouncedWithdrawAmount = useDebounce(withdrawAmount, 500)
 
     // Deposit 
     // Prepare the transaction
-    const { config: configDeposit, error: contractWriteError } = usePrepareContractWrite({
+    const { config: configDeposit } = usePrepareContractWrite({
         address: contractAddress,
         abi: abi,
         functionName: 'deposit',
         value: parseEther(debouncedDepositAmount),
-        enabled: Boolean(debouncedDepositAmount),
+        enabled: Boolean(debouncedDepositAmount) && parseInt(debouncedDepositAmount) !== 0,
         onError() {
             toast({
                 title: 'Error.',
@@ -69,16 +70,14 @@ const Bank = () => {
         }
     });
 
-    /*args: [parseInt(debouncedTokenId)],
-    enabled: Boolean(debouncedTokenId),*/
-
     // Get the write function
-    const { data: dataDeposit, write: writeDeposit } = useContractWrite(configDeposit)
+    const { data: dataDeposit, write: writeDeposit, error: depositWriteError } = useContractWrite(configDeposit)
 
     const { isLoading: isLoadingDeposit, isSuccess: isSuccessDeposit } = useWaitForTransaction({
         hash: dataDeposit?.hash,
         onSuccess(dataDeposit) {
             refetchBalanceOfUser();
+            setDepositAmount('');
             toast({
                 title: 'Congratulations.',
                 description: "Deposit was successfull.",
@@ -89,101 +88,48 @@ const Bank = () => {
         }
     })
 
-    // Deposit
-    // const deposit = async() => {
-    //     if(!depositAmount) {
-    //         toast({
-    //             title: 'Warning.',
-    //             description: "Please enter a number.",
-    //             status: 'warning',
-    //             duration: 4000,
-    //             isClosable: true,
-    //         })
-    //         return;
-    //     }
-    //     try {
-    //         console.log(depositAmount)
-    //         const { request } = await prepareWriteContract({
-    //             address: contractAddress,
-    //             abi: abi,
-    //             functionName: "deposit",
-    //             value: parseEther(depositAmount)
-    //         });
-    //         await writeContract(request)
-
-    //         setDepositAmount('');
-
-    //         // const balance = await getBalanceOfUser()
-    //         // setBalance(formatEther(balance))
-
-    //         await getEvents()
-
-    //         toast({
-    //             title: 'Congratulations!',
-    //             description: `You have successfully deposited ${depositAmount} ETH`,
-    //             status: 'success',
-    //             duration: 3000,
-    //             isClosable: true,
-    //         })
-    //     }
-    //     catch(err) {
-    //         toast({
-    //             title: 'Error!',
-    //             description: err.message,
-    //             status: 'error',
-    //             duration: 3000,
-    //             isClosable: true,
-    //         })
-    //     }
-    // }
-
-    // Withdraw
-    const withdraw = async () => {
-        if(!withdrawAmount) {
-            toast({
-                title: 'Warning.',
-                description: "Please enter a number.",
-                status: 'warning',
-                duration: 4000,
-                isClosable: true,
-            })
-            return;
-        }
-        try {
-            // On fait le withdraw
-            const { request } = await prepareWriteContract({
-                address: contractAddress,
-                abi: abi,
-                functionName: "withdraw",
-                args: [parseEther(withdrawAmount)]
-            });
-            await writeContract(request);
-
-            setWithdrawAmount('');
-
-            // On met à jour la balance
-            const balance = await getBalanceOfUser()
-            setBalance(formatEther(balance))
-
-            await getEvents()
-
-            toast({
-                title: 'Congratulations.',
-                description: "You have made a withdraw!",
-                status: 'success',
-                duration: 3000,
-                isClosable: true,
-            })
-        } catch (err) {
+    // Withdraw 
+    // Prepare the transaction
+    const { config: configWithdraw } = usePrepareContractWrite({
+        address: contractAddress,
+        abi: abi,
+        functionName: 'withdraw',
+        args: [parseEther(debouncedWithdrawAmount)],
+        enabled: Boolean(debouncedWithdrawAmount) && parseFloat(debouncedWithdrawAmount) <= parseFloat(formatEther(userBalance)),
+        onError() {
             toast({
                 title: 'Error.',
-                description: err.message,
+                description: "An error occured.",
                 status: 'error',
                 duration: 4000,
                 isClosable: true,
             })
+        },
+        onSuccess() {
+            console.log('c good');
         }
-    }
+    });
+
+    // Get the write function
+    const { data: dataWithdraw, write: writeWithdraw, error: withdrawWriteError } = useContractWrite(configWithdraw)
+
+    const { isLoading: isLoadingWithdraw, isSuccess: isSuccessWithdraw } = useWaitForTransaction({
+        hash: dataWithdraw?.hash,
+        onSuccess(dataWithdraw) {
+            refetchBalanceOfUser();
+            setWithdrawAmount('');
+            toast({
+                title: 'Congratulations.',
+                description: "Withdraw was successfull.",
+                status: 'success',
+                duration: 4000,
+                isClosable: true,
+            })
+        },
+        onError() {
+            console.log('erreur');
+        }
+    })
 
     // Get all the events 
     const getEvents = async() => {
@@ -219,6 +165,33 @@ const Bank = () => {
         }
     }
 
+    const handleWithdrawAmount = (arg) => {
+        if(!isNaN(arg)) {
+            setWithdrawAmount(arg);
+        }
+    }
+
+    useEffect(() => {
+        if(depositWriteError) {
+            toast({
+                title: 'Error.',
+                description: depositWriteError.message,
+                status: 'error',
+                duration: 4000,
+                isClosable: true,
+            })
+        }
+        if(withdrawWriteError) {
+            toast({
+                title: 'Error.',
+                description: withdrawWriteError.message,
+                status: 'error',
+                duration: 4000,
+                isClosable: true,
+            })
+        }
+    }, [depositWriteError, withdrawWriteError])
+
     return (
         <>
             <Flex width="100%">
@@ -243,9 +216,10 @@ const Bank = () => {
                             Withdraw
                         </Heading>
                         <Flex mt="1rem">
-                            <Input onChange={(e) => handleWithdrawAmount(e.target.value)} placeholder="Amount in Eth" value={withdrawAmount} />
-                            <Button colorScheme='whatsapp' onClick={() => withdraw()}>Withdraw</Button>
+                            <Input onChange={e => handleWithdrawAmount(e.target.value)} placeholder="Amount in Eth" value={withdrawAmount} />
+                            <Button disabled={!writeWithdraw || isLoadingWithdraw}colorScheme='whatsapp' onClick={() => writeWithdraw?.()}>{isLoadingWithdraw ? 'Withdrawing...' : 'Withdraw'}</Button>
                         </Flex>
+                        {parseFloat(debouncedWithdrawAmount) > parseFloat(formatEther(userBalance)) && <Text color='red' mt='.5rem'>You cannot withdraw more than {parseFloat(formatEther(userBalance))} ETH.</Text>}
                         <Heading as='h2' size='xl' mt="2rem">
                             Deposit Events
                         </Heading>
